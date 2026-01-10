@@ -8,4 +8,4 @@
 
 #
 [Click here](https://tiktool.mysellauth.com/) for premium TikTok tools (viewbot, followbot & more)<br>
-**Contact @adambankz on Telegram for full reverse (x-B, x-G & more)**
+**Contact [@adambankz](https://t.me/adambankz) on Telegram for full reverse (x-B, x-G & more)**
