@@ -2,101 +2,96 @@ import json
 import random
 import re
 import time
-import requests
-
-X_BOGUS = "fill"
-X_GNARLY = "fill"
-
-
-def CompressLzw(data: str) -> list[int]:
-    codebook = {chr(i): i for i in range(256)}
-    bit_index = 0
-    buffer = 0
-    output = []
-    bit_length = 8
-    next_code = 256
-
-    def _flush_buffer():
-        nonlocal buffer, bit_index, output
-        output.append(buffer)
-        buffer = 0
-        bit_index = 0
-
-    def _write_bits(code: int, length: int):
-        nonlocal buffer, bit_index
-        for _ in range(length):
-            if code & 1:
-                buffer |= 1 << bit_index
-            code >>= 1
-            bit_index += 1
-            if bit_index == 8:
-                _flush_buffer()
-
-    index = 0
-    while index < len(data):
-        chunk = data[index]
-        while index + 1 < len(data) and chunk + data[index + 1] in codebook:
-            index += 1
-            chunk += data[index]
-
-        code = codebook[chunk]
-        _write_bits(code, bit_length)
-
-        if index + 1 < len(data):
-            next_code += 1
-            new_chunk = chunk + data[index + 1]
-            codebook[new_chunk] = next_code
-
-            if (next_code & (next_code - 1)) == 0:
-                bit_length += 1
-
-        index += 1
-
-    if bit_index > 0:
-        _flush_buffer()
-
-    return output
-
-def CompressBytes(data: str) -> bytes:
-    return bytes(CompressLzw(data))
-
-
-def Bb64(s):
-    base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-    b64 = []
-
-    pad = (3 - len(s) % 3) % 3
-    s += "\x00" * pad  # 填充空字节
-
-    for i in range(0, len(s), 3):
-        b = (ord(s[i]) << 16) + (ord(s[i + 1]) << 8) + ord(s[i + 2])
-        b64.append(base64chars[(b >> 18) & 63])
-        b64.append(base64chars[(b >> 12) & 63])
-        b64.append(base64chars[(b >> 6) & 63])
-        b64.append(base64chars[b & 63])
-
-    if pad:
-        b64 = b64[:-pad]
-        b64 += ["="] * pad
-
-    return "".join(b64)
-
-
-def B64Shift(b64_string):
-    return re.sub(
-        r"[A-Za-z0-9+/=]",
-        lambda shift_table: "Dkdpgh4ZKsQB80/Mfvw36XI1R25+WUAlEi7NLboqYTOPuzmFjJnryx9HVGcaStCe="[
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=".index(
-                shift_table.group(0)
-            )
-        ],
-        b64_string,
-    )
 from py_mini_racer import py_mini_racer
 
 
+def LzwCompress(data: str) -> list[int]:
+    dictionary = {chr(i): i for i in range(256)}
+    bitPosition = 0
+    tempBuffer = 0
+    resultList = []
+    bitSize = 8
+    nextIndex = 256
 
-js_code = """
+    def _flush_buffer():
+        nonlocal tempBuffer, bitPosition, resultList
+        resultList.append(tempBuffer)
+        tempBuffer = 0
+        bitPosition = 0
+
+    def _write_bits(codeValue: int, length: int):
+        nonlocal tempBuffer, bitPosition
+        for _ in range(length):
+            if codeValue & 1:
+                tempBuffer |= 1 << bitPosition
+            codeValue >>= 1
+            bitPosition += 1
+            if bitPosition == 8:
+                _flush_buffer()
+
+    position = 0
+    while position < len(data):
+        substring = data[position]
+        while position + 1 < len(data) and substring + data[position + 1] in dictionary:
+            position += 1
+            substring += data[position]
+
+        codeValue = dictionary[substring]
+        _write_bits(codeValue, bitSize)
+
+        if position + 1 < len(data):
+            nextIndex += 1
+            newSubstring = substring + data[position + 1]
+            dictionary[newSubstring] = nextIndex
+
+            if (nextIndex & (nextIndex - 1)) == 0:
+                bitSize += 1
+
+        position += 1
+
+    if bitPosition > 0:
+        _flush_buffer()
+
+    return resultList
+
+def BytesCompress(data: str) -> bytes:
+    return bytes(LzwCompress(data))
+
+
+def EncodeBase64(inputStr):
+    base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    encodedList = []
+
+    padding = (3 - len(inputStr) % 3) % 3
+    inputStr += "\x00" * padding  # 填充空字节
+
+    for i in range(0, len(inputStr), 3):
+        combined = (ord(inputStr[i]) << 16) + (ord(inputStr[i + 1]) << 8) + ord(inputStr[i + 2])
+        encodedList.append(base64chars[(combined >> 18) & 63])
+        encodedList.append(base64chars[(combined >> 12) & 63])
+        encodedList.append(base64chars[(combined >> 6) & 63])
+        encodedList.append(base64chars[combined & 63])
+
+    if padding:
+        encodedList = encodedList[:-padding]
+        encodedList += ["="] * padding
+
+    return "".join(encodedList)
+
+
+def ShiftBase64(base64Str):
+    return re.sub(
+        r"[A-Za-z0-9+/=]",
+        lambda replacement: "Dkdpgh4ZKsQB80/Mfvw36XI1R25+WUAlEi7NLboqYTOPuzmFjJnryx9HVGcaStCe="[
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=".index(
+                replacement.group(0)
+            )
+        ],
+        base64Str,
+    )
+
+
+jsScript = """
 function yg18(e, t, r, n, o) {
     var ob;
     ob = [16, 12, 8, 7],
@@ -117,7 +112,7 @@ function yg23(e) {
 
 function yg33(e, t) {
     var r;
-    r = e['slice'](),
+    r = e['slice']()
         !function (e, t) {
             for (var r = 0; r < t && (yg18(e, 0, 4, 8, 12),
                 yg18(e, 1, 5, 9, 13),
@@ -226,14 +221,14 @@ function encode(key, d) {
 """
 
 
-def GetStrData(raw):
+def RetrieveStrData(raw):
 
-    com = py_mini_racer.MiniRacer()
-    com.eval(js_code)
-    raw_str = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
-    raw_str_bytes = CompressBytes(raw_str)
+    jsEngine = py_mini_racer.MiniRacer()
+    jsEngine.eval(jsScript)
+    jsonString = json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+    compressedBytes = BytesCompress(jsonString)
 
-    key = [
+    encryptionKey = [
         int(random.random() * 4294967296),
         int(random.random() * 4294967296),
         int(random.random() * 4294967296),
@@ -248,11 +243,11 @@ def GetStrData(raw):
         int(random.random() * 4294967296),
     ]
 
-    _e = chr(76) + com.call("encode", key, [i for i in raw_str_bytes])
+    encodedResult = chr(76) + jsEngine.call("encode", encryptionKey, [i for i in compressedBytes])
 
-    return B64Shift(Bb64(_e))
+    return ShiftBase64(EncodeBase64(encodedResult))
 
-RAW = {
+BROWSER_DATA = {
         "tokenList": [],
         "navigator": {
             "appCodeName": "Mozilla",
@@ -526,208 +521,5 @@ RAW = {
     }
 
 
-
-
-
-
-
-
-
-
-
-        
-
-        
-    
-
-
-
-
-    
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-    
-
-    
-
-
-import requests
-import json
-import time
-
-DEFAULT_HEADERS = {
-    "Accept": "*/*",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",
-    "Content-Type": "text/plain;charset=UTF-8",
-    "Origin": "https://www.tiktok.com",
-    "Referer": "https://www.tiktok.com/",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-site",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "sec-ch-ua": '"Chromium";v="139", "Google Chrome";v="139", "Not.A/Brand";v="99"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-}
-
-def BuildPayload():
-    return {
-        "magic": 538969122,
-        "version": 1,
-        "dataType": 8,
-        "strData": GetStrData(RAW),
-        "tspFromClient": int(time.time() * 1000)
-    }
-
-def BuildQueryParams(ms_token, user_agent, canvas_value, sdk_version):
-    query = f"msToken={ms_token}" if ms_token else "msToken="
-    x_bogus_val = X_BOGUS.get_x_bougs(query, user_agent, canvas_value)
-    body = json.dumps(BuildPayload(), separators=(',', ':'))
-    x_gnarly_val = X_GNARLY.get_X_Gnarly(
-        f"msToken={ms_token}&X-Bogus={x_bogus_val}" if ms_token else f"msToken=&X-Bogus={x_bogus_val}",
-        body,
-        user_agent,
-        canvas_value,
-        int(time.time()),
-        sdk_version
-    )
-    return {
-        "msToken": ms_token or "",
-        "X-Bogus": x_bogus_val,
-        "X-Gnarly": x_gnarly_val
-    }
-
-def SendTikTokReport():
-    url = "https://mssdk-va.tiktok.com/web/report"
-    headers = {**DEFAULT_HEADERS, "Host": "mssdk-va.tiktok.com"}
-    user_agent = RAW["navigator"]["userAgent"]
-    canvas_value = int(RAW["wID"].get("canvas", 0))
-    sdk_version = RAW["wID"].get("sdkVersion", "5.1.0")
-
-    params = BuildQueryParams(None, user_agent, canvas_value, sdk_version)
-    full_url = f"{url}?msToken={params['msToken']}&X-Bogus={params['X-Bogus']}&X-Gnarly={params['X-Gnarly']}"
-    
-    try:
-        response = requests.post(full_url, headers=headers, json=BuildPayload(), timeout=10)
-        token = response.headers.get("X-Ms-Token")
-        if not token:
-            set_cookie = response.headers.get("Set-Cookie", "")
-            for part in set_cookie.split(";"):
-                if part.strip().startswith("msToken="):
-                    token = part.strip().split("=", 1)[1]
-                    break
-        print("Extracted msToken:", token)
-        return token
-    except Exception as e:
-        print("Request failed:", e)
-        return None
-
-def GetMsToken(tt_csrf_token, ttwid, passport_csrf_token):
-    url = "https://mssdk-sg.tiktok.com/web/report"
-    user_agent = RAW["navigator"]["userAgent"]
-    canvas_value = int(RAW["wID"].get("canvas", 0))
-    sdk_version = RAW["wID"].get("sdkVersion", "5.1.0")
-
-    try:
-        with requests.session() as sess:
-            ms_token = SendTikTokReport()
-            if not ms_token:
-                print("Initial request failed to retrieve msToken")
-                return None
-
-            headers = {
-                **DEFAULT_HEADERS,
-                "Host": "mssdk-sg.tiktok.com",
-                "Cookie": (
-                    f"tt_csrf_token={tt_csrf_token}; "
-                    f"ttwid={ttwid}; "
-                    f"passport_csrf_token={passport_csrf_token}; "
-                    f"passport_csrf_token_default={passport_csrf_token}; "
-                    f"msToken={ms_token}"
-                )
-            }
-            params = BuildQueryParams(ms_token, user_agent, canvas_value, sdk_version)
-            response = sess.post(url, headers=headers, params=params, json=BuildPayload(), timeout=10, verify=False)
-            ms_token = sess.cookies.get("msToken")
-            if not ms_token:
-                print("Second request failed to retrieve msToken")
-                return None
-
-            headers = {
-                **DEFAULT_HEADERS,
-                "Host": "mssdk-sg.tiktok.com",
-                "Cookie": (
-                    f"tt_csrf_token={tt_csrf_token}; "
-                    f"ttwid={ttwid}; "
-                    f"passport_csrf_token={passport_csrf_token}; "
-                    f"passport_csrf_token_default={passport_csrf_token}; "
-                    f"msToken={ms_token}"
-                )
-            }
-            params = BuildQueryParams(ms_token, user_agent, canvas_value, sdk_version)
-            response = sess.post(url, headers=headers, params=params, json=BuildPayload(), timeout=10, verify=False)
-            ms_token = sess.cookies.get("msToken")
-            if not ms_token:
-                print("Third request failed to retrieve msToken")
-                return None
-
-            headers = {
-                **DEFAULT_HEADERS,
-                "Host": "mssdk-sg.tiktok.com",
-                "Cookie": (
-                    f"tt_csrf_token={tt_csrf_token}; "
-                    f"ttwid={ttwid}; "
-                    f"passport_csrf_token={passport_csrf_token}; "
-                    f"passport_csrf_token_default={passport_csrf_token}; "
-                    f"msToken={ms_token}"
-                )
-            }
-            params = BuildQueryParams(ms_token, user_agent, canvas_value, sdk_version)
-            response = sess.post(url, headers=headers, params=params, json=BuildPayload(), timeout=10, verify=False)
-            ms_token = sess.cookies.get("msToken")
-            if not ms_token:
-                print("Fourth request failed to retrieve msToken")
-                return None
-
-            return ms_token
-    except Exception as e:
-        print("Request failed:", e)
-        return None
-
-    
-
-
-    
-
-
 if __name__ == "__main__":
-    print(GetStrData(RAW))
+    print(RetrieveStrData(BROWSER_DATA))
